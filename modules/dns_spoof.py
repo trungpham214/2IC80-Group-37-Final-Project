@@ -1,4 +1,3 @@
-from netfilterqueue import NetfilterQueue
-from scapy.all import * 
-import os
-
+class DNSSpoofer:
+    #TODO: Implement DNS Spoofing
+    pass
