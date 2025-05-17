@@ -20,8 +20,8 @@ def main():
     
     try:
         if args.mode in ['arp', 'all']:
-            # TODO: Add implementation
-            pass
+            arp_spoofer = ARPSpoofer(args.interface, args.target, args.gateway)
+            arp_spoofer.start()
             
         if args.mode in ['dns', 'all']:
             # TODO: Add implementation
