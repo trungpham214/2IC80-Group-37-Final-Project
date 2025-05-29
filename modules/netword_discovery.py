@@ -1,16 +1,28 @@
-from scapy.all import sr1, IP, ICMP
+import sys
+from scapy.all import srp, Ether, ARP
+from mac_vendor_lookup import MacLookup, VendorNotFoundError
 import socket
 
-def ping_sweep(network_prefix):
-    live_hosts = []
+def arp_scan(network_prefix):
     for i in range(1, 255):
         ip = f"{network_prefix}.{i}"
-        pkt = IP(dst=ip)/ICMP()
-        resp = sr1(pkt, timeout=0.5, verbose=0)
-        if resp:
-            print(f"[+] Host {ip} is up")
-            live_hosts.append(ip)
-    return live_hosts
+        # Create ARP request packet
+        arp_request = Ether(dst="ff:ff:ff:ff:ff:ff")/ARP(pdst=ip)
+        try:
+            # Send ARP request and wait for response
+            arp_response = srp(arp_request, timeout=1, verbose=0)[0]
+            if arp_response:
+                mac = arp_response[0][1].hwsrc
+                try:
+                    vendor = MacLookup().lookup(mac)
+                    print(f"[+] Host {ip} is up - MAC: {mac} - Vendor: {vendor}")
+                except VendorNotFoundError:
+                    print(f"[+] Host {ip} is up - MAC: {mac}")
+        except IndexError:
+            continue
+        except KeyboardInterrupt:
+            print("\n[*] Stopping network discovery...")
+            sys.exit(0)
 
 def get_network_prefix():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -30,7 +42,5 @@ if __name__ == "__main__":
     if network_prefix == "127.0.0":
         print("[!] Could not detect a valid network connection. Exiting.")
     else:
-        live_hosts = ping_sweep(network_prefix)
         print("[*] Live hosts in the network:")
-        for host in live_hosts:
-            print(host)
+        arp_scan(network_prefix)
