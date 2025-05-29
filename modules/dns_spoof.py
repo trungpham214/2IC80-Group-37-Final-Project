@@ -70,9 +70,7 @@ if __name__ == "__main__":
     interface = "en0"  # Change this to your network interface
     target_ip = "192.168.0.187"  # Change this to your target's IP
     gateway_ip = "192.168.0.1"  # Change this to your gateway's IP
-    
     # Dictionary of domains to spoof and their fake IP addresses
 
-    
     spoofer = DNSSpoofer(interface, target_ip, gateway_ip)
     spoofer.start()
