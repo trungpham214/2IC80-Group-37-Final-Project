@@ -8,7 +8,7 @@ from typing import List, Optional
 from modules.arp_spoof import ARPSpoofer
 from modules.dns_spoof import DNSSpoofer
 from modules.ssl_strip import SSLStripper
-from modules.netword_discovery import NetworkScanner
+from modules.network_discovery import NetworkScanner
 
 class MITMTool:
     def __init__(self, interface: str, gateway: str, attack_type: str, manual_mode: bool = False):
