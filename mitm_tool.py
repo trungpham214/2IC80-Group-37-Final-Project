@@ -24,8 +24,9 @@ def main():
             arp_spoofer.start()
             
         if args.mode in ['dns', 'all']:
-            # TODO: Add implementation
-            pass
+            dns_spoofer = DNSSpoofer(args.interface, args.target, args.gateway)
+            dns_spoofer.start()
+
             
         if args.mode in ['ssl', 'all']:
             # TODO: Add implementation
