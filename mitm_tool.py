@@ -9,6 +9,7 @@ from modules.arp_spoof import ARPSpoofer
 from modules.dns_spoof import DNSSpoofer
 from modules.ssl_strip import SSLStripper
 from modules.network_discovery import NetworkScanner
+import os
 
 class MITMTool:
     def __init__(self, interface: str, gateway: str, attack_type: str, manual_mode: bool = False):
@@ -41,7 +42,10 @@ class MITMTool:
         if self.attack_type == 'dns':
             dns_spoofer = DNSSpoofer(self.interface, target, self.gateway)
             self.spoofers.append(dns_spoofer)
-            self._start_thread(dns_spoofer.start)
+            # Create a daemon thread for DNS spoofing
+            dns_thread = threading.Thread(target=dns_spoofer.start, daemon=True)
+            self.threads.append(dns_thread)
+            dns_thread.start()
 
         if self.attack_type == 'ssl':
             pass
@@ -56,13 +60,19 @@ class MITMTool:
         """Cleanup resources and stop all spoofers."""
         print("\n[*] Shutting down all spoofers...")
         for spoofer in self.spoofers:
+            print(f"[*] Stopping {type(spoofer).__name__}...")
             spoofer.stop()
         for thread in self.threads:
+            print(f"[*] Joining thread {thread.name}...")
             thread.join()
+            print(f"[*] Thread {thread.name} joined")
         print("\n[*] Shutting down MITM tool...")
 
     def run(self) -> None:
         """Main execution method."""
+        if self.attack_type == 'dns':
+            os.system("sudo sysctl -w net.inet.ip.forwarding=0")
+
         targets = self.setup_targets()
         for target in targets:
             self.create_spoofer(target)
@@ -71,6 +81,9 @@ class MITMTool:
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
+            if self.attack_type == 'dns':
+                os.system("sudo sysctl -w net.inet.ip.forwarding=1")
+
             self.cleanup()
             sys.exit(0)
 
