@@ -29,6 +29,7 @@ If you enable the flag "-m", this will be printed:
 0. ['192.168.0.1', 'TP-Link Corporation Limited', '34:60:f9:55:c8:6c'] !!This is a router
 1. ['192.168.0.8', 'Unknown Device', '5c:3e:1b:9d:fb:d7']
 2. ['192.168.0.189', 'Apple, Inc.', 'a4:83:e7:bc:08:54']
+Pick a target IP (from 1 to 2): 
 ```
 Then select the IP by entering the index, not the IP itself. (This should be improved)
 
