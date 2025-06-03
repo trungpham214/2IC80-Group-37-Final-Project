@@ -26,7 +26,7 @@ class MITMTool:
         scanner.start()
         
         if self.manual_mode:
-            return [input('Pick a target IP: ')]
+            return [scanner.victim_list[int(input(f'Pick a target IP (from 1 to {len(scanner.victim_list) - 1}): '))][0]]
         return scanner.victim_list
 
     def create_spoofer(self, target: str) -> None:
@@ -70,9 +70,6 @@ class MITMTool:
 
     def run(self) -> None:
         """Main execution method."""
-        if self.attack_type == 'dns':
-            os.system("sudo sysctl -w net.inet.ip.forwarding=0")
-
         targets = self.setup_targets()
         for target in targets:
             self.create_spoofer(target)
@@ -81,9 +78,6 @@ class MITMTool:
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
-            if self.attack_type == 'dns':
-                os.system("sudo sysctl -w net.inet.ip.forwarding=1")
-
             self.cleanup()
             sys.exit(0)
 
