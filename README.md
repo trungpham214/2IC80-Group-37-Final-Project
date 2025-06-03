@@ -1,5 +1,13 @@
 # 2IC80-Final-Project
 
+## Pre-requisite
+1. This version is only tested on the macOS operating system.
+2. Auto forward function is enabled; if not, run this command:
+```bash
+sudo sysctl -w net.inet.ip.forwarding=1 
+```
+3. The attacker is connected to the same Wi-Fi network as the victim(s).
+
 ## Instruction
 1. Installation
 ```bash
@@ -8,16 +16,23 @@ pip install -r requirements.txt
 
 2. Usage
 ```bash
-sudo python3 mitm_tool.py -i <interface> -t <target_ip> -g <gateway_ip> -m <mode>
+sudo python3 mitm_tool.py -i <interface> -g <gateway_ip> -t <attack_type> -m <manual>
 ```
 Parameters:
 - -i, --interface: Network interface to use (e.g., en0 for macOS, eth0 for Linux)
-- -t, --target: Target IP address
 - -g, --gateway: Gateway IP address
-- -m, --mode: Attack mode to use (arp: ARP spoofing only, dns: DNS spoofing only, ssl: SSL stripping only, all: All attacks (default))
-## Minutes
-Meeting 1:
-Discusses LAB relation to project and decided that it can be applied if we get "plug and play" to work.
-Then discussed what we think an automated tool would look like and decided to ask during next lab.
-Decided to try and finish ARP and DNS by the end of week 4. Try and work on the sniffing tool meanwhile.
-Ask for direction during lab as proceeding further seems unclear
+- -t, --type: Attack mode to use (arp: ARP spoofing only (default), dns: DNS spoofing only, ssl: SSL stripping only)
+- -m, --manual: set to manual if you want to attack only 1 target, otherwise it will attack all.
+
+If you enable the flag "-m", this will be printed:
+```bash
+0. ['192.168.0.1', 'TP-Link Corporation Limited', '34:60:f9:55:c8:6c'] !!This is a router
+1. ['192.168.0.8', 'Unknown Device', '5c:3e:1b:9d:fb:d7']
+2. ['192.168.0.189', 'Apple, Inc.', 'a4:83:e7:bc:08:54']
+```
+Then select the IP by entering the index, not the IP itself. (This should be improved)
+
+## Limitations
+1. This attack only works in a local network due to the scope of the course
+2. The DNS attack is hard-coded to attack the domain "example.com"
+
