@@ -44,7 +44,7 @@ class MITMTool:
             self._start_thread(dns_spoofer.start)
 
         if self.attack_type == 'ssl':
-            ssl_spoofer = SSLStripper(self.interface, target, self.gateway)
+            ssl_spoofer = SSLStripper()
             self.spoofers.append(ssl_spoofer)
             self._start_thread(ssl_spoofer.start)
 
