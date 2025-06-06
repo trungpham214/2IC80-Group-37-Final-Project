@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
 import time
-from scapy.all import ARP, Ether, srp, sendp, get_if_hwaddr, get_if_addr
+from scapy.all import ARP, Ether, srp, sendp, get_if_hwaddr, get_if_addr, conf
 import sys
 # import netifaces
+
+conf.verbose = 0
 
 class ARPSpoofer:
     def __init__(self, interface, target_ip, gateway_ip):
@@ -75,7 +77,7 @@ class ARPSpoofer:
 if __name__ == "__main__":
     # Example usage
     interface = "en0"  # Change this to your network interface
-    target_ip = "192.168.0.187"  # Target IP address
+    target_ip = "192.168.0.189"  # Target IP address
     gateway_ip = "192.168.0.1"  # Gateway IP address
     
     spoofer = ARPSpoofer(interface, target_ip, gateway_ip)

@@ -9,6 +9,7 @@ from modules.arp_spoof import ARPSpoofer
 from modules.dns_spoof import DNSSpoofer
 from modules.ssl_strip import SSLStripper
 from modules.network_discovery import NetworkScanner
+import os
 
 class MITMTool:
     def __init__(self, interface: str, gateway: str, attack_type: str, manual_mode: bool = False):
@@ -25,7 +26,7 @@ class MITMTool:
         scanner.start()
         
         if self.manual_mode:
-            return [input('Pick a target IP: ')]
+            return [scanner.victim_list[int(input(f'Pick a target IP (from 1 to {len(scanner.victim_list) - 1}): '))][0]]
         return scanner.victim_list
 
     def create_spoofer(self, target: str) -> None:
@@ -41,7 +42,10 @@ class MITMTool:
         if self.attack_type == 'dns':
             dns_spoofer = DNSSpoofer(self.interface, target, self.gateway)
             self.spoofers.append(dns_spoofer)
-            self._start_thread(dns_spoofer.start)
+            # Create a daemon thread for DNS spoofing
+            dns_thread = threading.Thread(target=dns_spoofer.start, daemon=True)
+            self.threads.append(dns_thread)
+            dns_thread.start()
 
         if self.attack_type == 'ssl':
             ssl_spoofer = SSLStripper()
@@ -58,9 +62,12 @@ class MITMTool:
         """Cleanup resources and stop all spoofers."""
         print("\n[*] Shutting down all spoofers...")
         for spoofer in self.spoofers:
+            print(f"[*] Stopping {type(spoofer).__name__}...")
             spoofer.stop()
         for thread in self.threads:
+            print(f"[*] Joining thread {thread.name}...")
             thread.join()
+            print(f"[*] Thread {thread.name} joined")
         print("\n[*] Shutting down MITM tool...")
 
     def run(self) -> None:

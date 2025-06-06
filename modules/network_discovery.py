@@ -17,15 +17,18 @@ class NetworkScanner():
                 vendor = MacLookup().lookup(mac)
             except VendorNotFoundError:
                 vendor = 'Unknown Device'
-            print(f'{ip} ({vendor})')
-            self.victim_list.append(ip)
+            self.victim_list.append([ip, vendor, mac])  # Use mac directly instead of calling get_mac again
+        
+        for i, victim in enumerate(self.victim_list):
+            print(f"{i}. {victim}")
+
 
     def start(self):
         print("[*] Start scanning network:")
         self.arp_scan()
 
 if __name__ == "__main__":
-    scanner = NetworkScanner('192.168.0.1', 'en0')
+    scanner = NetworkScanner('192.168.0.1', 'en0', 16)  # Updated gateway IP to match your network
 
     print("[*] Start scanning network:")
     scanner.start()
