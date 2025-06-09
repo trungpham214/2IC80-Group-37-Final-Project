@@ -30,7 +30,8 @@ class MITMTool:
             sys.exit(1)
 
         if self.manual_mode:
-            return [scanner.victim_list[int(input(f'Pick a target IP (from 1 to {len(scanner.victim_list) - 1}): '))][0]]
+            picked = input(f'Pick a target IP (from 1 to {len(scanner.victim_list) - 1}): ').split(",")
+            return [scanner.victim_list[int(i)][0] for i in picked]
         return [x[0] for x in scanner.victim_list]
 
     def create_spoofer(self, target: str) -> None:

