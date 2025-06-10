@@ -2,8 +2,8 @@ from scapy.all import srp, Ether, ARP
 from mac_vendor_lookup import MacLookup, VendorNotFoundError
 
 class NetworkScanner():
-    def __init__(self, gateway, iface, prefix_length=24) -> None:
-        self.network = gateway + f'/{prefix_length}'
+    def __init__(self, gateway, iface, subnet_mask=24) -> None:
+        self.network = gateway + f'/{subnet_mask}'
         self.iface = iface
         self.victim_list = []
     

