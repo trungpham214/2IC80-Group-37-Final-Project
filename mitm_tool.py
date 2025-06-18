@@ -20,7 +20,7 @@ from modules.network_discovery import NetworkScanner
 import os
 
 class MITMTool:
-    def __init__(self, interface: str, gateway: str, attack_type: str, manual_mode: bool = False):
+    def __init__(self, interface: str, gateway: str, attack_type: str, manual_mode: bool = False, deep_scan: bool = False):
         self.interface = interface
         # Handle gateway with or without subnet mask
         if '/' in gateway:
@@ -34,9 +34,11 @@ class MITMTool:
         self.threads: List[threading.Thread] = []
         self.spoofers: List[ARPSpoofer | DNSSpoofer | SSLStripper] = []
 
+        self.deep_scan = deep_scan
+
     def setup_targets(self) -> List[str]:
         """Setup target IPs based on mode selection."""
-        scanner = NetworkScanner(self.gateway, self.interface, int(self.network_mask))
+        scanner = NetworkScanner(self.gateway, self.interface, int(self.network_mask), self.deep_scan)
         scanner.start()
 
         if len(scanner.victim_list) == 0:
@@ -113,6 +115,8 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('-g', '--gateway', required=True, help='Gateway IP address')
     parser.add_argument('-t', '--type', choices=['arp', 'dns', 'ssl'], 
                       default='arp', help='Attack type to use')
+    parser.add_argument('-s', '--scan', action='store_true', 
+                        help='Perform more scan on the targets for more information')
     return parser.parse_args()
 
 def main() -> None:
@@ -121,7 +125,8 @@ def main() -> None:
         interface=args.interface,
         gateway=args.gateway,
         attack_type=args.type,
-        manual_mode=args.mode
+        manual_mode=args.mode,
+        deep_scan=args.scan
     )
     tool.run()
 
